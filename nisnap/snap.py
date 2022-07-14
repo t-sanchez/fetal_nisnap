@@ -208,9 +208,8 @@ def _snap_slices_(data, slices, axis, bb=None, figsize=None, pbar=None):
                     cmap = ListedColormap(_aget_cmap_(labels))
 
                 test = test[min(xs):max(xs) + 1, min(ys):max(ys) + 1]
-
                 ax.imshow(test, interpolation='none', cmap=cmap,
-                          vmin=0, vmax=vmax)
+                          vmin=0, vmax=vmax,aspect="auto")
 
             ax.axis('off')
             ax.text(0, 0, '%i' % slice_index,
@@ -234,11 +233,12 @@ def __snap__(data, axes='xyz', bg=None, slices=None, rowsize=None,
 
     from nisnap.utils.slices import cut_slices, _fix_rowsize_, _fix_figsize_
     from nisnap.utils.slices import __maxsize__
-
+    
     rowsize = _fix_rowsize_(axes, rowsize)
     figsize = _fix_figsize_(axes, figsize)
-
-    t = int(__maxsize__(data)/3.0)
+    #t = int(__maxsize__(data)/3.0)
+    # Dirty modification for plotting a fetal scan in several orientations.
+    t=0 
     slices = cut_slices(data, axes, slices=slices, rowsize=rowsize,
                         threshold=t)
     n_slices = sum([sum([len(each) for each in slices[e]]) for e in axes])
@@ -370,7 +370,6 @@ def plot_segment(filepaths, axes='xyz', bg=None, opacity=90, slices=None,
     import os
     import tempfile
     matplotlib.use('Agg')
-
     fp = savefig
     if savefig is None:
         if animated:
@@ -414,4 +413,4 @@ def plot_segment(filepaths, axes='xyz', bg=None, opacity=90, slices=None,
     if savefig is None:
         # Return image
         from IPython.display import Image
-        return Image(filename=fp)
+        return Image(filename=fp), fp
