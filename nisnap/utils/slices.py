@@ -75,6 +75,16 @@ def __maxsize__(data):
     return maxsize
 
 
+def organize_slices(data, slices):
+    lambdas = __get_lambdas__(data)
+
+    new_slices = {}
+    for axis, slices in slices.items():
+        new_slices[axis] = []
+        for slice_index in slices:
+            new_slices[axis].append(slice_index)
+    return new_slices
+
 def remove_empty_slices(data, slices, threshold=0):
     lambdas = __get_lambdas__(data)
 
@@ -142,10 +152,8 @@ def cut_slices(data, axes, rowsize, slices=None, step=3, threshold=75):
             sl = {e: slices for e in axes}
     else:
         sl = {e: default_slices[e] for e in axes}
-        sl = remove_empty_slices(data, sl, threshold=threshold)
-
-    sl = remove_empty_slices(data, sl)
-
+        
+    sl = organize_slices(data,sl)
     sl = {each: list(_chunks_(sl[each], rowsize[each])) for each in axes}
 
     return sl

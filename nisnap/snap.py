@@ -1,6 +1,5 @@
 from nisnap.utils.aseg import basal_ganglia_labels, cortical_labels
 from nisnap.utils.aseg import amygdala_nuclei, hippocampal_subfields
-
 __format__ = '.png'
 
 
@@ -121,13 +120,6 @@ def _snap_contours_(data, slices, axis, bg, figsize=None, bb=None, pbar=None):
             if len(xs) == 0:
                 continue
 
-            test3 = np.flip(np.swapaxes(np.abs(lambdas[axis](bg,
-                                                             int(slice_index))),
-                                        0, 1), 0)
-            test3 = test3[min(xs):max(xs) + 1, min(ys):max(ys) + 1]
-
-            ax.imshow(test3, interpolation='none', cmap='gray')
-
             test = test[min(xs):max(xs) + 1, min(ys):max(ys) + 1]
 
             _plot_contours_in_slice_(test, ax, labels=labels)
@@ -146,7 +138,7 @@ def _snap_contours_(data, slices, axis, bg, figsize=None, bb=None, pbar=None):
     return paths, bb
 
 
-def _snap_slices_(data, slices, axis, bb=None, figsize=None, pbar=None):
+def _snap_slices_(data, slices, axis, bb=None, figsize=None, pbar=None, voxel_size=None):
     from matplotlib import pyplot as plt
     import numpy as np
     import tempfile
@@ -157,8 +149,9 @@ def _snap_slices_(data, slices, axis, bb=None, figsize=None, pbar=None):
     d = data.ravel()
     ratio = len(d[d <= 10]) / len(d)
     # has_orig = len(labels) > 50  # not bb is None
-    is_raw = ratio < 0.80
-
+    #is_raw = ratio < 0.8
+    is_raw = True
+    #print(labels, ratio)
     paths = []
     if not has_bb:
         bb = {}
@@ -167,14 +160,19 @@ def _snap_slices_(data, slices, axis, bb=None, figsize=None, pbar=None):
 
     from nisnap.utils.slices import __get_lambdas__
     lambdas = __get_lambdas__(data)
-
+    if is_raw:
+        bb_vmax = data.max()
+    if voxel_size is not None:
+        voxel_size = {'x': voxel_size[[0,1]],
+                        'y': voxel_size[[0,2]],
+                        'z': voxel_size[[1,2]]}
+        voxel_size = voxel_size[axis]
     fd, path = tempfile.mkstemp(suffix='_%s%s' % (axis, __format__))
     os.close(fd)
     paths.append(path)
 
     abs_index = 0
     for a, chunk in enumerate(slices):
-
         if not has_bb:
             bb[a] = []
 
@@ -201,15 +199,20 @@ def _snap_slices_(data, slices, axis, bb=None, figsize=None, pbar=None):
             else:  # standard 3D label volume
 
                 if is_raw:
-                    vmax, cmap = (None, 'gray')
+                    vmax, cmap = (bb_vmax, 'gray')
                 else:
                     vmax = np.max(labels)
                     from matplotlib.colors import ListedColormap
                     cmap = ListedColormap(_aget_cmap_(labels))
 
                 test = test[min(xs):max(xs) + 1, min(ys):max(ys) + 1]
-                ax.imshow(test, interpolation='none', cmap=cmap,
-                          vmin=0, vmax=vmax,aspect="auto")
+                if voxel_size is None:
+                    ax.imshow(test, interpolation='none', cmap=cmap,
+                            vmin=0, vmax=vmax,aspect="auto")
+                else:
+  
+                    ax.imshow(test, interpolation='none', cmap=cmap,
+                            vmin=0, vmax=vmax,aspect=voxel_size[1]/voxel_size[0])
 
             ax.axis('off')
             ax.text(0, 0, '%i' % slice_index,
@@ -222,9 +225,18 @@ def _snap_slices_(data, slices, axis, bb=None, figsize=None, pbar=None):
                 bbox_inches='tight', transparent=True, pad_inches=0)
     return paths, bb
 
+def fill_mask(data):
+    """Fill the missing slices in the mask to prevent them
+    from being removed
+    """
+    import numpy as np
+    filled_mask = data.sum(2)
+    filled_mask[filled_mask>0] = 1
+    return filled_mask[:,:,np.newaxis].repeat(data.shape[2],2)
 
 def __snap__(data, axes='xyz', bg=None, slices=None, rowsize=None,
-             contours=False, figsize=None, samebox=False, margin=5):
+             contours=False, figsize=None, samebox=False, margin=5,
+             voxel_size=None):
     from matplotlib import pyplot as plt
     import logging as log
 
@@ -233,14 +245,16 @@ def __snap__(data, axes='xyz', bg=None, slices=None, rowsize=None,
 
     from nisnap.utils.slices import cut_slices, _fix_rowsize_, _fix_figsize_
     from nisnap.utils.slices import __maxsize__
-    
+
     rowsize = _fix_rowsize_(axes, rowsize)
     figsize = _fix_figsize_(axes, figsize)
-    #t = int(__maxsize__(data)/3.0)
+    t = int(__maxsize__(data)/3.0)
     # Dirty modification for plotting a fetal scan in several orientations.
-    t=0 
+    #t=0 
+    data = fill_mask(data)
     slices = cut_slices(data, axes, slices=slices, rowsize=rowsize,
                         threshold=t)
+
     n_slices = sum([sum([len(each) for each in slices[e]]) for e in axes])
     if n_slices == 0:
         msg = 'Should provide at least one slice. %s' % slices
@@ -265,7 +279,8 @@ def __snap__(data, axes='xyz', bg=None, slices=None, rowsize=None,
         opt = {'slices': slices[axis],
                'axis': axis,
                'figsize': figsize[axis],
-               'pbar': pbar}
+               'pbar': pbar,
+               'voxel_size':voxel_size}
 
         if contours:
             # Rendering contours
@@ -395,15 +410,19 @@ def plot_segment(filepaths, axes='xyz', bg=None, opacity=90, slices=None,
         if labels is not None:
             from nisnap.utils import aseg
             filepaths = aseg.__picklabel_fs__(filepaths, labels=labels)
-        data = np.asarray(nib.load(filepaths).dataobj)
+        data = np.asarray(nib.load(filepaths).dataobj).astype(int)
 
+    voxel_size=None
     if bg is not None:
-        bg = np.asarray(nib.load(bg).dataobj)
+        bg = nib.load(bg)
+        voxel_size = bg.header["pixdim"][1:4]
+        bg = np.asarray(bg.dataobj).astype(int)
 
     paths, paths_orig = __snap__(data, axes=axes, bg=bg,
                                  slices=slices, contours=contours,
                                  rowsize=rowsize, figsize=figsize,
-                                 samebox=samebox, margin=margin)
+                                 samebox=samebox, margin=margin,
+                                 voxel_size=voxel_size)
 
     from nisnap.utils.montage import __montage__
     has_orig = bg is not None
