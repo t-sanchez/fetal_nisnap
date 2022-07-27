@@ -273,8 +273,8 @@ def __snap__(data, axes='xyz', bg=None, slices=None, rowsize=None,
         if samebox:
             from nisnap.utils.slices import __get_abs_minmax
             same_bb = __get_abs_minmax(data, axis, slices[axis], margin=margin)
-            log.warning('Using bounding box: %s (axis %s)'
-                        % (same_bb[0][0], axis))
+            #log.warning('Using bounding box: %s (axis %s)'
+            #            % (same_bb[0][0], axis))
 
         opt = {'slices': slices[axis],
                'axis': axis,
